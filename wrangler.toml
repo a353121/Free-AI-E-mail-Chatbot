@@ -1,0 +1,26 @@
+name = "ai-e-mail-chatbot"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "CHAT_MEMORY"
+id = "YOUR-KV-NAMESPACE-ID"
+
+[vars]
+SENDER_NAME  = "AI E-mail Chatbot"
+SENDER_EMAIL   = "AI@Example.com"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1
