@@ -92,7 +92,7 @@ Use **Wrangler secrets** for sensitive values.
 ### 1) Clone and install
 
 ```bash
-git clone <your-public-repo-url>
+git clone https://github.com/a353121/Free-AI-E-mail-Chatbot
 cd AI-E-mail-Chatbot
 npm install
 ```
