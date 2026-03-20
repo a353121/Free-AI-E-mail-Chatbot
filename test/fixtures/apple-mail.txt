@@ -1,0 +1,9 @@
+Let's ship this version tomorrow.
+
+Begin forwarded message:
+From: Taylor Example <taylor@example.com>
+Date: March 19, 2026 at 8:03:11 AM UTC
+To: Casey Example <casey@example.com>
+Subject: Launch notes
+
+Original forwarded content.
