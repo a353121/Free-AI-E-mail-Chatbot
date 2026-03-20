@@ -1,0 +1,13 @@
+{
+  "id": "gen-123",
+  "provider": "OpenRouter",
+  "model": "openrouter/free",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "Sure — here is a cleaned response with **formatting** removed."
+      }
+    }
+  ]
+}

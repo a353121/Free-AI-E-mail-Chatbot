@@ -1,0 +1,11 @@
+{
+  "id": "gen-456",
+  "provider": "OpenRouter",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
