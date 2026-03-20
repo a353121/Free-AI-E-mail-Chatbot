@@ -3,5 +3,9 @@
   "type": "module",
   "dependencies": {
     "postal-mime": "^2.0.3"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:watch": "node --test --watch"
   }
 }

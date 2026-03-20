@@ -4,11 +4,13 @@ compatibility_date = "2025-01-01"
 
 [[kv_namespaces]]
 binding = "CHAT_MEMORY"
-id = "YOUR-KV-NAMESPACE-ID"
+id = "<YOUR_KV_NAMESPACE_ID>"
 
 [vars]
-SENDER_NAME  = "AI E-mail Chatbot"
-SENDER_EMAIL   = "AI@Example.com"
+SENDER_NAME = "AI E-mail Chatbot"
+SENDER_EMAIL = "ai@yourdomain.com"
+SUBJECT_TRIGGER = "[ai]"
+SUBJECT_TRIGGER_MODE = "startsWith"
 
 [observability]
 enabled = false
