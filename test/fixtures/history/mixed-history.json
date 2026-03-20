@@ -1,0 +1,11 @@
+[
+  null,
+  { "role": "system", "content": "ignore me" },
+  { "role": "user", "content": "  First question  " },
+  { "role": "assistant", "content": "**First answer**" },
+  { "role": "user", "content": "   " },
+  { "role": "assistant", "content": 42 },
+  { "role": "user", "content": "Second question" },
+  { "role": "assistant", "content": "Second\n\n\nanswer" },
+  { "role": "user", "content": "Third question" }
+]
