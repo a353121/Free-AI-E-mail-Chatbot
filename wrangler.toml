@@ -1,16 +1,34 @@
 name = "ai-e-mail-chatbot"
-main = "src/index.js"
-compatibility_date = "2025-01-01"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-email-bot"
+database_id = "<YOUR_D1_DATABASE_ID>"
+migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "CHAT_MEMORY"
 id = "<YOUR_KV_NAMESPACE_ID>"
 
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "ai-email-bot-files"
+
 [vars]
+LLM_PROVIDER = "openrouter"
+LLM_MODEL = ""
+LLM_BASE_URL = ""
+OPENAI_COMPATIBLE_BASE_URL = ""
+OPENAI_COMPATIBLE_MODEL = ""
+DELIVERY_PROVIDER = "brevo"
 SENDER_NAME = "AI E-mail Chatbot"
 SENDER_EMAIL = "ai@yourdomain.com"
 SUBJECT_TRIGGER = "[ai]"
 SUBJECT_TRIGGER_MODE = "startsWith"
+TOOL_FANOUT_MODE = "inline"
+TOOL_FANOUT_URL = ""
 
 [observability]
 enabled = false
@@ -21,6 +39,9 @@ enabled = true
 head_sampling_rate = 1
 persist = true
 invocation_logs = true
+
+[triggers]
+crons = ["*/5 * * * *"]
 
 [observability.traces]
 enabled = true

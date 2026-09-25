@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
-import { buildReplySubject } from '../src/email/subject.js';
+import { buildReplySubject } from '../src/email/subject.ts';
 
 const readJsonFixture = async name => JSON.parse(await fs.readFile(new URL(`./fixtures/providers/${name}`, import.meta.url), 'utf8'));
 

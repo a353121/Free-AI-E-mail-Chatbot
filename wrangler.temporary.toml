@@ -1,0 +1,33 @@
+# Isolated configuration for `npm run deploy:temporary`.
+# It has isolated temporary D1/KV bindings and no production secrets.
+name = "ai-e-mail-chatbot-temporary"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# D1 and KV IDs are intentionally absent. `npm run deploy:temporary` resolves
+# or creates them in the active temporary account and writes a generated config
+# under .wrangler/, which is ignored by Git.
+
+# Cloudflare temporary accounts do not support R2. The temporary deploy omits
+# this optional binding.
+
+[vars]
+TEMPORARY_ADMIN_MODE = "true"
+TEMPORARY_ADMIN_PASSWORD = "testme"
+LLM_PROVIDER = "openrouter"
+LLM_MODEL = "openrouter/free"
+LLM_BASE_URL = ""
+OPENAI_COMPATIBLE_BASE_URL = ""
+OPENAI_COMPATIBLE_MODEL = ""
+DELIVERY_PROVIDER = "brevo"
+SENDER_NAME = "AI E-mail Chatbot temporary test"
+SENDER_EMAIL = "temporary@example.invalid"
+SUBJECT_TRIGGER = "[ai]"
+SUBJECT_TRIGGER_MODE = "startsWith"
+TOOL_FANOUT_MODE = "inline"
+TOOL_FANOUT_URL = ""
+
+[observability]
+enabled = false
+
+# Temporary free accounts do not permit cron triggers.

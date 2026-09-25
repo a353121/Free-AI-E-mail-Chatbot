@@ -1,286 +1,134 @@
-# 🤖 AI E-mail Chatbot (Cloudflare Worker + OpenRouter + Brevo)
+# AI Email Chatbot
 
-<p align="center">
-  <a href="https://workers.cloudflare.com/"><img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
-  <a href="https://developers.cloudflare.com/workers/runtime-apis/handlers/email/"><img src="https://img.shields.io/badge/Cloudflare-Email%20Routing-0EA5E9" alt="Cloudflare Email Routing" /></a>
-  <a href="https://openrouter.ai/"><img src="https://img.shields.io/badge/OpenRouter-LLM%20Gateway-7C3AED" alt="OpenRouter" /></a>
-  <a href="https://www.brevo.com/"><img src="https://img.shields.io/badge/Brevo-SMTP%20API-22C55E" alt="Brevo" /></a>
-  <a href="https://developers.cloudflare.com/kv/"><img src="https://img.shields.io/badge/Cloudflare-KV%20Memory-2563EB" alt="Cloudflare KV" /></a>
-  <img src="https://img.shields.io/badge/Runtime-Node.js%20ESM-3C873A" alt="Node.js ESM" />
-  <img src="https://img.shields.io/badge/Status-Production%20Ready-success" alt="Status" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License" />
-</p>
+An email-first AI assistant running on Cloudflare Workers. An approved sender emails the Worker, the model composes a response using bounded conversation context, and the Worker replies by email.
 
-> **Turn incoming e-mails into an AI conversation thread automatically.**  
-> This Worker receives e-mails, cleans quoted content, maintains per-sender conversation memory in KV, generates a response with OpenRouter, and replies through Brevo.
+This repository is an email-first AI assistant with a durable, token-budgeted harness. The external capability registry is intentionally empty: there are no built-in action tools, custom MCP connections, browser actions, API actions, or external writes available to the model. The harness can compact older context into versioned D1 summaries and privately search the complete current conversation when recent context is insufficient.
 
----
+## What runs where
 
-## 💸 Fully Free to Run
-
-This project is designed to run **entirely on free tiers**, making it possible to deploy a working AI email assistant **without any hosting cost**.
-
-It relies on the following free limits:
-
-- **Cloudflare Workers:** up to **100,000 requests per day** on the free plan  
-- **Brevo free plan:** up to **300 transactional emails per day**  
-- **OpenRouter:** uses the **`openrouter/free` model endpoint**, which provides free access to supported community models
-
-As long as your usage stays within these limits, the system can run **completely free**.
-
----
-
-## ✨ What this project does
-
-When an e-mail is received:
-
-1. **Filters by configurable subject trigger** (default: `startsWith` on `[ai]`) to avoid triggering on every inbox event.
-2. **Recognizes reset commands** when the subject contains `reset` in any casing and clears that sender's saved memory while keeping the KV key.
-3. **Parses raw MIME e-mail** content using `postal-mime`.
-4. **Cleans quoted/replied text** so the model sees only the latest user intent.
-5. **Loads memory** (last 15 Q&A turns) from Cloudflare KV per sender address.
-6. **Optionally injects a global system prompt** from KV key: `SYSTEM_INSTRUCTIONS`.
-7. **Calls OpenRouter** Chat Completions API.
-8. **Stores the new turn** back into KV.
-9. **Replies by e-mail** to the original sender via Brevo.
-
----
-
-## 🧠 Architecture (at a glance)
-
-```text
-Incoming Email
-   │
-   ▼
-Cloudflare Email Worker (src/index.js)
-   ├─ Orchestrate inbound message flow
-   ├─ Delegate body cleanup to src/email/*
-   ├─ Delegate memory access to src/history/store.js
-   ├─ Delegate model calls to src/providers/openrouter.js
-   └─ Delegate outbound delivery to src/providers/brevo.js
+```mermaid
+flowchart LR
+  E[Inbound email] --> W[Cloudflare Worker]
+  W --> G[Approval and safety gates]
+  G --> C[Subject conversation resolver]
+  C --> D[(D1 full transcript)]
+  D --> X[(D1 FTS5 index)]
+  C --> H[Token-budgeted harness]
+  D --> H
+  H --> L[Configured language model]
+  H --> Q[Private history search]
+  Q --> X
+  H --> P[Persist run and reply]
+  P --> D
+  P --> O[Durable email outbox]
+  O --> S[Email delivery provider]
+  T[Scheduled Worker] --> J[Compaction jobs]
+  J --> D
+  W --> K[(Optional KV settings cache)]
+  W --> F[(Optional R2 attachments)]
 ```
 
----
+| Concern | Runtime location | Current role |
+| --- | --- | --- |
+| Email ingestion and replies | `src/index.ts`, `src/providers/` | Active product path |
+| Sender approval and identity | `src/data/users.ts`, `src/user/` | Active gate |
+| Model request and response loop | `src/agent/loop.ts`, `src/providers/llm.ts` | Active core |
+| Conversation identity | `src/data/memory.ts`, D1 | Subject-keyed; repeated `Re:`, `Fw:`, and `Fwd:` prefixes resolve together |
+| Conversation memory | `src/data/`, D1 + FTS5 | Full messages remain authoritative; summaries and search index are derived |
+| Compaction and recall | `src/data/compaction.ts`, `src/data/historySearch.ts` | Versioned summaries, retryable jobs, bounded private history search |
+| Outbound delivery | `src/data/outbox.ts`, `src/providers/sendEmail.ts` | Active durable path |
+| Admin control plane | `src/admin/` | Active model, email, safety, sender, and secret controls |
+| Capability registry | `src/tools/registry.ts` | Intentionally empty |
+| Fan-out and schema validation | `src/agent/`, `src/types.ts` | Dormant generic harness for a future capability |
+| Custom MCP | Removed | No runtime or UI entry point |
 
-## 🧱 Module layout
+## What happens to an email
 
-```text
-src/
-├─ index.js                  # Worker entrypoint: orchestration + top-level error handling
-├─ shared.js                 # Plain-text normalization and shared constants
-├─ email/
-│  ├─ normalizeBody.js       # Inbound plain-text / HTML cleanup
-│  ├─ subject.js             # Reply-subject generation
-│  ├─ threading.js           # Message-ID / References helpers
-│  └─ triggers.js            # Subject trigger normalization + matching
-├─ history/
-│  └─ store.js               # KV history normalization, loading, clearing, and persistence
-└─ providers/
-   ├─ openrouter.js          # OpenRouter request / response handling
-   └─ brevo.js               # Brevo SMTP API delivery
+1. The Worker requires D1, claims the message idempotently, and normalizes the sender.
+2. Blocked, unapproved, rate-limited, or safety-guarded senders receive the appropriate controlled response.
+3. The Worker parses the email, resolves the subject-based conversation, runs bounded emergency compaction when needed, loads recent context, and optionally stores inbound MIME attachments in R2.
+4. The harness calls the configured model with no external tools. If enabled, the model may request the private `history_search` operation, which is ownership-scoped to the current conversation and capped per email.
+5. The user message, model reply, run telemetry, and compaction queue state are stored in D1; the reply is queued and delivered.
+
+The assistant remains useful as a conversational email chatbot without external tools. It must not claim to have performed an action it cannot perform.
+
+## Core configuration
+
+At minimum, production needs a D1 binding, an LLM provider, a delivery provider, `SENDER_EMAIL`, `ADMIN_PASSWORD_HASH`, and `ADMIN_SESSION_SECRET`. KV and R2 are optional. See [configuration](docs/CONFIGURATION.md).
+
+Example model settings:
+
+```toml
+LLM_PROVIDER = "openrouter"
+DEFAULT_LLM = "openrouter/free"
+LLM_MODEL = ""
+DELIVERY_PROVIDER = "brevo"
+SENDER_EMAIL = "bot@example.com"
+COMPACTION_TRIGGER_TOKENS = "8000"
+COMPACTION_TARGET_TOKENS = "4000"
+COMPACTION_KEEP_RECENT_TOKENS = "3000"
+HISTORY_SEARCH_ENABLED = "true"
 ```
 
-When adding features, prefer extending one of these focused modules or introducing a new peer module rather than expanding `src/index.js`.
+Store credentials as Wrangler secrets or through the encrypted Admin secret path. Never commit them.
 
----
-
-## 🔐 Environment variables & configuration
-
-Use **Cloudflare Worker secrets** for sensitive values. Keep only non-secret defaults in `wrangler.toml`.
-
-### Required runtime bindings
-
-- `CHAT_MEMORY` (Cloudflare KV namespace binding)
-
-### Required environment variables
-
-| Variable | Required | Description |
-|---|---:|---|
-| `OPENROUTER_API_KEY` | ✅ | API key for OpenRouter |
-| `BREVO_API_KEY` | ✅ | API key for Brevo transactional email |
-| `SENDER_NAME` | ✅ | Display name used for outbound e-mail sender |
-| `SENDER_EMAIL` | ✅ | Verified sender e-mail address in Brevo |
-| `SUBJECT_TRIGGER` | Optional | Subject text to match after normalization; defaults to `[ai]` |
-| `SUBJECT_TRIGGER_MODE` | Optional | Matching mode: `contains`, `startsWith`, or `exact` |
-
-### Optional KV keys
-
-| Key | Purpose |
-|---|---|
-| `SYSTEM_INSTRUCTIONS` | Global system prompt prepended to every conversation |
-
----
-
-## 🚀 Quick start
-
-### 1) Clone and install
+## Local commands
 
 ```bash
-git clone https://github.com/a353121/free-ai-e-mail-chatbot.git
-cd free-ai-e-mail-chatbot
 npm install
-```
-
-### 2) Authenticate Wrangler
-
-```bash
-npx wrangler login
-```
-
-### 3) Create KV namespace (once)
-
-```bash
-npx wrangler kv namespace create CHAT_MEMORY
-```
-
-Copy the returned namespace `id` into `wrangler.toml` under:
-
-```toml
-[[kv_namespaces]]
-binding = "CHAT_MEMORY"
-id = "<YOUR_KV_NAMESPACE_ID>"
-```
-
-### 4) Configure `wrangler.toml` with non-secret values
-
-```toml
-name = "ai-e-mail-chatbot"
-main = "src/index.js"
-compatibility_date = "2025-01-01"
-
-[[kv_namespaces]]
-binding = "CHAT_MEMORY"
-id = "<YOUR_KV_NAMESPACE_ID>"
-
-[vars]
-SENDER_NAME = "AI E-mail Chatbot"
-SENDER_EMAIL = "ai@yourdomain.com"
-SUBJECT_TRIGGER = "[ai]"
-SUBJECT_TRIGGER_MODE = "startsWith"
-```
-
-### 5) Add secrets
-
-Use either method below for **only** the secret values:
-
-```bash
-npx wrangler secret put OPENROUTER_API_KEY
-npx wrangler secret put BREVO_API_KEY
-```
-
-### 6) Deploy from the CLI
-
-```bash
-npx wrangler deploy
-```
-
-### 7) Deploy from the Cloudflare dashboard
-
-If you prefer not to use the Wrangler CLI for deployment:
-
-1. Fork or import `https://github.com/a353121/free-ai-e-mail-chatbot` into your own GitHub account.
-2. In the Cloudflare dashboard, go to **Workers & Pages** → **Create** → **Import a repository**.
-3. Connect GitHub if prompted, then select your forked repository.
-4. Keep the Worker entrypoint as `src/index.js`.
-5. Add the KV namespace binding so `CHAT_MEMORY` points to your namespace.
-6. In **Settings** → **Variables and Secrets**, add these plain-text variables:
-   - `SENDER_NAME`
-   - `SENDER_EMAIL`
-   - `SUBJECT_TRIGGER`
-   - `SUBJECT_TRIGGER_MODE`
-7. In the same screen, add these as **secrets**:
-   - `OPENROUTER_API_KEY`
-   - `BREVO_API_KEY`
-8. Save, deploy, and then connect Cloudflare Email Routing to the Worker.
-
-### 8) Customize the subject trigger without editing code
-
-Update `wrangler.toml` or set environment-specific vars to change how inbound subjects are matched:
-
-```toml
-[vars]
-SUBJECT_TRIGGER = "[support]"
-SUBJECT_TRIGGER_MODE = "startsWith"
-```
-
-Examples:
-
-- `SUBJECT_TRIGGER = "[ai]"` with `SUBJECT_TRIGGER_MODE = "startsWith"` matches `[ai] Draft this`.
-- `SUBJECT_TRIGGER = "ask ai"` with `SUBJECT_TRIGGER_MODE = "contains"` matches `Weekly update - ask ai for summary`.
-- `SUBJECT_TRIGGER = "assistant"` with `SUBJECT_TRIGGER_MODE = "exact"` matches only `assistant` after normalization.
-
----
-
-## 📮 Cloudflare Email Routing setup
-
-1. Add/verify your domain in Cloudflare.
-2. Enable **Email Routing**.
-3. Create a route that forwards an address (for example `ai@yourdomain.com`) to this Worker.
-4. Send a test message whose subject starts with `[ai]`, or send a message with `reset` anywhere in the subject to clear stored history for that sender.
-
----
-
-## 🧪 Local development & logs
-
-```bash
-npx wrangler dev
+npm run typecheck
 npm test
-npm run test:watch
-npx wrangler tail
+npm run verify
+npm run dev
 ```
 
----
+Deploy after verification:
 
-## ⚙️ Behavior details
-
-- **Subject gate:** inbound subjects are lowercased, trimmed, repeated spaces are collapsed, and reply/forward prefixes such as `Re:` / `Fwd:` are stripped before matching.
-- **Trigger config:** `SUBJECT_TRIGGER` selects the text to match, and `SUBJECT_TRIGGER_MODE` chooses `contains`, `startsWith`, or `exact`.
-- **Reset command:** if the subject contains `reset` in any casing, the sender's saved chat history is replaced with an empty array so the KV key remains present while memory is cleared.
-- **Memory window:** max **15 turns** (30 message objects) per sender.
-- **Quoted text cleanup:** removes common quoted thread fragments (`\n--\n` and `>` lines).
-- **Model call:** uses OpenRouter endpoint `POST /api/v1/chat/completions` with `model: openrouter/free`.
-- **Response channel:** sends a plain-text reply through Brevo API.
-
----
-
-## 🛡️ Security checklist
-
-- [ ] Never commit real API keys in `wrangler.toml`.
-- [ ] Keep only non-secret defaults in `[vars]`.
-- [ ] Put `OPENROUTER_API_KEY` and `BREVO_API_KEY` in Cloudflare secrets.
-- [ ] Keep sender address/domain verified in Brevo.
-
----
-
-## 🌿 Public branch workflow
-
-To maintain a public clone safely:
-
-1. Keep your private branch for internal experimentation.
-2. Maintain a public-safe branch such as `public-release` that contains source, tests, docs, and placeholder config values.
-3. Do **not** include live secrets, private keys, or production-only identifiers in that branch.
-4. Push the sanitized branch to `https://github.com/a353121/free-ai-e-mail-chatbot`.
-
-This repository is now structured for that workflow because `wrangler.toml` contains only placeholder, non-secret values.
-
----
-
-## 🧩 Suggested `wrangler.toml` template (public-safe)
-
-```toml
-name = "ai-e-mail-chatbot"
-main = "src/index.js"
-compatibility_date = "2025-01-01"
-
-[[kv_namespaces]]
-binding = "CHAT_MEMORY"
-id = "<YOUR_KV_NAMESPACE_ID>"
-
-[vars]
-SENDER_NAME = "AI E-mail Chatbot"
-SENDER_EMAIL = "ai@yourdomain.com"
-SUBJECT_TRIGGER = "[ai]"
-SUBJECT_TRIGGER_MODE = "startsWith"
+```bash
+npx wrangler deploy --dry-run
+npm run db:migrate
+npm run deploy
 ```
 
-> Put all sensitive values in Cloudflare Worker secrets, not in git-tracked files.
+Apply migrations `0029_capability_reset.sql` and `0030_harness_memory_foundation.sql` to an existing database. They clear seeded tool surfaces, disable old stored remote registrations, add subject-based memory, add the FTS5 index, and add token/compaction telemetry. Historical migrations are retained because D1 migrations are forward-only.
+
+## Safety baseline
+
+- The model receives bounded email/history context and untrusted-content instructions.
+- D1 retains the complete original transcript; compaction only creates derived summary versions and never deletes messages.
+- Full-history search is private, ownership-scoped, FTS5-first, LIKE-fallback, capped, and marked as untrusted model data.
+- Token estimates use conservative UTF-8 bytes divided by three plus message overhead; provider usage is telemetry, not preflight authority.
+- The registry is empty and configuration cannot invent a capability.
+- Legacy `/tools`, `/mcp`, `/settings`, `/usage`, `/runs/*`, and `/conversations` operational routes are disabled.
+- Admin and user sessions are separate, signed, CSRF-protected, and owner-scoped.
+- Provider secrets are encrypted at rest and never returned to the browser.
+- Inbound URLs are not fetched by the current product.
+- KV is only an optional short-lived settings cache; it is not a history store.
+- Internal fan-out is signed and replay-protected, but no capability currently dispatches through it.
+
+## Adding the first capability later
+
+Do not reintroduce a general integration catalog. Add one narrow capability only after defining:
+
+- the user-facing reason it belongs in an email assistant;
+- its exact input/output schema and byte limits;
+- ownership and authorization rules;
+- read versus user-write versus external-write behavior;
+- provider/binding requirements and failure behavior;
+- audit events, confirmation requirements, and regression tests;
+- the README and “What runs where” update.
+
+The registry is the only place a capability becomes visible to the agent. Until then, `allTools` remains `[]`.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Admin control plane](docs/ADMIN.md)
+- [User portal](docs/USER_PORTAL.md)
+- [Providers](docs/PROVIDERS.md)
+- [Security](docs/SECURITY.md)
+- [Testing](docs/TESTING.md)
+- [Operations](docs/OPERATIONS.md)
+- [Fan-out harness](docs/FANOUT.md)
+- [Removed MCP status](docs/MCP.md)

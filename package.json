@@ -1,11 +1,37 @@
 {
+  "name": "ai-e-mail-chatbot",
+  "version": "2.1.0",
   "private": true,
+  "description": "Email-first AI assistant for Cloudflare Workers with D1 memory, governed model access, and configurable OpenAI-compatible providers.",
   "type": "module",
-  "dependencies": {
-    "postal-mime": "^2.0.3"
+  "main": "src/index.ts",
+  "engines": {
+    "node": ">=24"
   },
   "scripts": {
-    "test": "node --test",
-    "test:watch": "node --test --watch"
+    "dev": "wrangler dev --local",
+    "test": "node --test test/*.test.js",
+    "test:watch": "node --test --watch test/*.test.js",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test",
+    "db:migrate": "wrangler d1 migrations apply ai-email-bot",
+    "db:migrate:local": "wrangler d1 migrations apply ai-email-bot --local",
+    "db:export": "wrangler d1 export ai-email-bot --remote",
+    "deploy": "wrangler deploy",
+    "deploy:temporary": "node scripts/deploy-temporary.mjs",
+    "admin:hash": "node scripts/admin-password.mjs",
+    "setup": "node scripts/setup.mjs"
+  },
+  "dependencies": {
+    "postal-mime": "^2.7.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260917.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.134.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260917.1": true
   }
 }

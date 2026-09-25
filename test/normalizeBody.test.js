@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
-import { decodeEntities, htmlToReadableText, normalizeEmailBody, stripSignature } from '../src/email/normalizeBody.js';
+import { decodeEntities, htmlToReadableText, normalizeEmailBody, stripSignature } from '../src/email/normalizeBody.ts';
 import { extractAssistantContent } from '../src/providers/openrouter.js';
 
 const readFixture = async name => fs.readFile(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');

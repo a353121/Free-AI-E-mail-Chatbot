@@ -1,0 +1,3 @@
+ALTER TABLE mcp_servers ADD COLUMN allowed_tools TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE mcp_servers ADD COLUMN requires_confirmation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mcp_servers ADD COLUMN timeout_ms INTEGER NOT NULL DEFAULT 10000;

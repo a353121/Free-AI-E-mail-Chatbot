@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { matchesResetSubject, matchesSubjectTrigger, normalizeInboundSubject } from '../src/email/triggers.js';
+import { matchesResetSubject, matchesSubjectTrigger, normalizeInboundSubject } from '../src/email/triggers.ts';
 
 test('normalizeInboundSubject lowercases, trims, and collapses whitespace', () => {
   assert.equal(normalizeInboundSubject('   Hello   OPENROUTER   World   '), 'hello openrouter world');

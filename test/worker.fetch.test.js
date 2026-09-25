@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import worker from '../src/index.js';
+import worker from '../src/index.ts';
 
 test('fetch redirects browser visits to the GitHub repository with a 301', async () => {
   const response = await worker.fetch(new Request('https://ai-e-mail-chatbot.example'));
